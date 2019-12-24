@@ -33,6 +33,7 @@ class NNIManager implements Manager {
     private dispatcher: IpcInterface | undefined;
     private currSubmittedTrialNum: number;  // need to be recovered
     private trialConcurrencyChange: number; // >0: increase, <0: decrease
+    private resumedTrailNum: number;
     private log: Logger;
     private dataStore: DataStore;
     private experimentProfile: ExperimentProfile;
@@ -48,6 +49,7 @@ class NNIManager implements Manager {
     constructor() {
         this.currSubmittedTrialNum = 0;
         this.trialConcurrencyChange = 0;
+        this.resumedTrailNum = 0;
         this.trainingService = component.get(TrainingService);
         assert(this.trainingService);
         this.dispatcherPid = 0;
@@ -112,7 +114,7 @@ class NNIManager implements Manager {
         return this.dataStore.exportTrialHpConfigs();
     }
 
-    public addCustomizedTrialJob(hyperParams: string): Promise<number> {
+    public addCustomizedTrialJob(hyperParams: string, trailJobId?: string): Promise<number> {
         if (this.readonly) {
             return Promise.reject(new Error('Error: can not add customized trial job in readonly mode!'));
         }
@@ -128,6 +130,7 @@ class NNIManager implements Manager {
         }
 
         const form: TrialJobApplicationForm = {
+            jobId: trailJobId,
             sequenceId: this.experimentProfile.nextSequenceId++,
             hyperParameters: {
                 value: JSON.stringify(packedParameter),
@@ -220,6 +223,8 @@ class NNIManager implements Manager {
             checkpointDir);
 
         const allTrialJobs: TrialJobInfo[] = await this.dataStore.listTrialJobs();
+        const runningTrailJobs: TrialJobInfo[] = allTrialJobs.filter(
+            (job: TrialJobInfo) => job.status === 'RUNNING');
 
         // Resume currSubmittedTrialNum
         this.currSubmittedTrialNum = allTrialJobs.length;
@@ -228,6 +233,20 @@ class NNIManager implements Manager {
         await Promise.all(allTrialJobs
             .filter((job: TrialJobInfo) => job.status === 'WAITING' || job.status === 'RUNNING')
             .map((job: TrialJobInfo) => this.dataStore.storeTrialJobEvent('FAILED', job.id)));
+
+        // Resume running TrailJobs
+        this.log.info(`Trying to Resume ${runningTrailJobs.length} Running Jobs`)
+        for (const job of runningTrailJobs) {
+            if (job.hyperParameters !== undefined && job.hyperParameters.length >= 1) {
+                this.log.info(JSON.parse(job.hyperParameters[0]))
+                const parameters = JSON.parse(job.hyperParameters[0])["parameters"]
+                this.currSubmittedTrialNum--;
+                this.addCustomizedTrialJob(JSON.stringify(parameters), `Resumed-${job.id}`);
+                this.log.info(`Resume Running Job as Customized Job: ${job.id}`)
+                this.resumedTrailNum++;
+            }
+        }
+
 
         // Collect generated trials and imported trials
         const finishedTrialData: string = await this.exportData();
@@ -368,7 +387,7 @@ class NNIManager implements Manager {
             CUDA_VISIBLE_DEVICES: this.getGpuEnvvarValue()
         };
         const newEnv = Object.assign({}, process.env, nniEnv);
-        const tunerProc: ChildProcess = getTunerProc(command,stdio,newCwd,newEnv);
+        const tunerProc: ChildProcess = getTunerProc(command, stdio, newCwd, newEnv);
         this.dispatcherPid = tunerProc.pid;
         this.dispatcher = createDispatcherInterface(tunerProc);
 
@@ -705,7 +724,10 @@ class NNIManager implements Manager {
                     }
                     this.dispatcher.sendCommand(IMPORT_DATA, this.trialDataForTuner);
                 }
-                this.requestTrialJobs(this.experimentProfile.params.trialConcurrency);
+
+                const requestTrialNum = this.experimentProfile.params.trialConcurrency - this.resumedTrailNum;
+                this.requestTrialJobs(requestTrialNum);
+                this.log.info(`Request ${requestTrialNum} Jobs on INITIALIZED`)
                 break;
             }
             case NEW_TRIAL_JOB: {

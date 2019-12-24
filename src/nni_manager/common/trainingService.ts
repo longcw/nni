@@ -22,6 +22,7 @@ interface HyperParameters {
  * define TrialJobApplicationForm
  */
 interface TrialJobApplicationForm {
+    jobId?: string,
     readonly sequenceId: number;
     readonly hyperParameters: HyperParameters;
 }

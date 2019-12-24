@@ -193,7 +193,14 @@ class LocalTrainingService implements TrainingService {
     }
 
     public submitTrialJob(form: TrialJobApplicationForm): Promise<TrialJobDetail> {
-        const trialJobId: string = uniqueString(5);
+        let trialJobId: string;
+        if (form.jobId === undefined) {
+            trialJobId = uniqueString(5);
+            form.jobId = trialJobId;
+        } else {
+            trialJobId = form.jobId;
+        }
+
         const trialJobDetail: LocalTrialJobDetail = new LocalTrialJobDetail(
             trialJobId,
             'WAITING',
@@ -274,7 +281,7 @@ class LocalTrainingService implements TrainingService {
                 this.log.info(`Specified GPU indices: ${this.localConfig.gpuIndices}`);
                 if (this.localConfig.gpuIndices !== undefined) {
                     this.designatedGpuIndices = new Set(this.localConfig.gpuIndices.split(',')
-                            .map((x: string) => parseInt(x, 10)));
+                        .map((x: string) => parseInt(x, 10)));
                     if (this.designatedGpuIndices.size === 0) {
                         throw new Error('gpuIndices can not be empty if specified.');
                     }
@@ -382,7 +389,7 @@ class LocalTrainingService implements TrainingService {
         trialJobDetail.gpuIndices = resource.gpuIndices;
     }
 
-    private tryGetAvailableResource(): [boolean, { gpuIndices: number[]}] {
+    private tryGetAvailableResource(): [boolean, { gpuIndices: number[] }] {
         if (this.localTrialConfig === undefined) {
             throw new Error('localTrialConfig is not initialized!');
         }
@@ -427,7 +434,7 @@ class LocalTrainingService implements TrainingService {
         }
     }
 
-    private occupyResource(resource: {gpuIndices: number[]}): void {
+    private occupyResource(resource: { gpuIndices: number[] }): void {
         if (this.gpuScheduler !== undefined) {
             for (const index of resource.gpuIndices) {
                 const num: number | undefined = this.occupiedGpuIndexNumMap.get(index);
@@ -490,7 +497,7 @@ class LocalTrainingService implements TrainingService {
         return script;
     }
 
-    private async runTrialJob(trialJobId: string, resource: {gpuIndices: number[]}): Promise<void> {
+    private async runTrialJob(trialJobId: string, resource: { gpuIndices: number[] }): Promise<void> {
         const trialJobDetail: LocalTrialJobDetail = <LocalTrialJobDetail>this.jobMap.get(trialJobId);
         if (this.localTrialConfig === undefined) {
             throw new Error(`localTrialConfig not initialized!`);
@@ -517,7 +524,7 @@ class LocalTrainingService implements TrainingService {
         await execNewFile(path.join(trialJobDetail.workingDirectory, '.nni', 'metrics'));
         const scriptName: string = getScriptName('run');
         await fs.promises.writeFile(path.join(trialJobDetail.workingDirectory, scriptName),
-                                    runScriptContent.join(getNewLine()), { encoding: 'utf8', mode: 0o777 });
+            runScriptContent.join(getNewLine()), { encoding: 'utf8', mode: 0o777 });
         await this.writeParameterFile(trialJobDetail.workingDirectory, trialJobDetail.form.hyperParameters);
         const trialJobProcess: cp.ChildProcess = runScript(path.join(trialJobDetail.workingDirectory, scriptName));
         this.setTrialJobStatus(trialJobDetail, 'RUNNING');
