@@ -241,7 +241,7 @@ class NNIManager implements Manager {
                 this.log.info(JSON.parse(job.hyperParameters[0]))
                 const parameters = JSON.parse(job.hyperParameters[0])["parameters"]
                 this.currSubmittedTrialNum--;
-                this.addCustomizedTrialJob(JSON.stringify(parameters), `Resumed-${job.id}`);
+                this.addCustomizedTrialJob(JSON.stringify(parameters), `${job.id}_retry`);
                 this.log.info(`Resume Running Job as Customized Job: ${job.id}`)
                 this.resumedTrailNum++;
             }
@@ -536,6 +536,12 @@ class NNIManager implements Manager {
                         event: trialJobDetail.status,
                         hyper_params: hyperParams // eslint-disable-line @typescript-eslint/camelcase
                     }));
+
+                    // push this job to queue for retry
+                    this.log.info(`Retry Failed Job as Customized Job: ${trialJobId}, params: ${hyperParams}`)
+                    finishedTrialJobNum--;
+                    const parameters = JSON.parse(hyperParams)["parameters"]
+                    this.addCustomizedTrialJob(JSON.stringify(parameters), `${trialJobId}_retry`)
                     break;
                 case 'WAITING':
                 case 'RUNNING':
