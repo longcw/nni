@@ -172,7 +172,7 @@ class LocalTrainingService implements TrainingService {
                         const exitcode: number = parseInt(code, 10);
                         if (exitcode === 0) {
                             this.setTrialJobStatus(trialJob, 'SUCCEEDED');
-                        } else if (exitcode === -1) {
+                        } else if (exitcode === 1) {
                             this.setTrialJobStatus(trialJob, 'SYS_CANCELED');
                         }
                         trialJob.endTime = parseInt(timestamp, 10);
